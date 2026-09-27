@@ -5,6 +5,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+# Polars: uma thread por worker reduz o pico de memoria (importante no plano
+# free do Render, 512 MB). Pode ser sobrescrito por POLARS_MAX_THREADS.
+os.environ.setdefault("POLARS_MAX_THREADS", "1")
+
 # Repo root: <repo>/src/candidatos/config.py -> parents[2] == <repo>
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

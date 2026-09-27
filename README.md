@@ -29,6 +29,8 @@ uv run python -m candidatos.build
 
 O comando lê os CSV de `data/prestacao_de_contas_eleitorais_candidatos_2026/`, seleciona as colunas usadas nas visualizações e grava `data/dashboard/*.parquet` (compressão `zstd`).
 
+Em runtime as tabelas são abertas de forma **lazy** (`pl.scan_parquet`) e as agregações só materializam o resultado final — o pico de memória fica em ~300 MB mesmo com os CSV de ~1,6 GB (por isso roda no plano free do Render, 512 MB). O Polars usa 1 thread por worker (`POLARS_MAX_THREADS=1`, definido em `config.py`).
+
 ## Estrutura (MVC em `src/`)
 
 ```

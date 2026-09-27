@@ -1,8 +1,8 @@
 """Agregacoes do dashboard (camada de modelo).
 
-Cada funcao recebe os filtros, aplica sobre os dados uma unica vez e devolve
-resultados pequenos (totais e tabelas agregadas), que sao cacheados. Dessa
-forma evitamos manter copias gigantes de linhas filtradas em memoria.
+Cada funcao recebe os filtros, monta um plano *lazy* sobre o parquet e so
+materializa os resultados agregados (pequenos), que sao cacheados. Assim a
+memoria fica baixa: nunca mantemos uma copia inteira das linhas filtradas.
 """
 
 from __future__ import annotations
@@ -18,14 +18,33 @@ from .schema import EXCL_CONTRATADAS, EXCL_PAGAS
 TODOS = repository.TODOS
 
 
-def _por_espectro(df: pl.DataFrame, valor: str) -> pl.DataFrame:
+def _grupo(lf: pl.LazyFrame, coluna: str, valor: str) -> pl.DataFrame:
     return (
-        df.group_by("ESPECTRO")
+        lf.group_by(coluna)
+        .agg(pl.col(valor).sum().alias("valor"))
+        .sort("valor", descending=True)
+        .collect()
+    )
+
+
+def _por_espectro(lf: pl.LazyFrame, valor: str) -> pl.DataFrame:
+    return (
+        lf.group_by("ESPECTRO")
         .agg(pl.col(valor).sum().alias("valor"))
         .with_columns(pl.col("ESPECTRO").replace_strict(ORDEM_ESPECTRO, default=9).alias("ord"))
         .sort("ord")
         .drop("ord")
+        .collect()
     )
+
+
+def _totais(lf: pl.LazyFrame, valor: str, n_candidatos: bool = False, n_doadores: bool = False) -> dict:
+    exprs = [pl.col(valor).sum().alias("total"), pl.len().alias("n_lancamentos")]
+    if n_candidatos:
+        exprs.append(pl.col("SQ_CANDIDATO").n_unique().alias("n_candidatos"))
+    if n_doadores:
+        exprs.append(pl.col("NR_CPF_CNPJ_DOADOR").n_unique().alias("n_doadores"))
+    return lf.select(exprs).collect().row(0, named=True)
 
 
 @lru_cache(maxsize=512)
@@ -34,19 +53,17 @@ def resumo_receitas(uf: str, cargo: str, partido: str, espectro: str, extras: tu
         repository.carregar()["receitas"], uf, cargo, partido, espectro, dict(extras)
     )
     valor = "VR_RECEITA"
+    base = _totais(rec, valor, n_candidatos=True, n_doadores=True)
     return {
-        "total": rec[valor].sum(),
-        "n_lancamentos": rec.height,
-        "n_candidatos": rec["SQ_CANDIDATO"].n_unique() if rec.height else 0,
-        "n_doadores": rec["NR_CPF_CNPJ_DOADOR"].n_unique() if rec.height else 0,
-        "por_uf": rec.group_by("SG_UF").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
-        "por_partido": rec.group_by("SG_PARTIDO").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
+        **base,
+        "por_uf": _grupo(rec, "SG_UF", valor),
+        "por_partido": _grupo(rec, "SG_PARTIDO", valor),
         "por_espectro": _por_espectro(rec, valor),
-        "por_fonte": rec.group_by("DS_FONTE_RECEITA").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
-        "por_natureza": rec.group_by("DS_NATUREZA_RECEITA").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
-        "por_genero": rec.group_by("DS_GENERO").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
-        "por_cor": rec.group_by("DS_COR_RACA").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
-        "por_candidato": rec.group_by("SQ_CANDIDATO").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
+        "por_fonte": _grupo(rec, "DS_FONTE_RECEITA", valor),
+        "por_natureza": _grupo(rec, "DS_NATUREZA_RECEITA", valor),
+        "por_genero": _grupo(rec, "DS_GENERO", valor),
+        "por_cor": _grupo(rec, "DS_COR_RACA", valor),
+        "por_candidato": _grupo(rec, "SQ_CANDIDATO", valor),
     }
 
 
@@ -59,25 +76,28 @@ def resumo_despesas(uf: str, cargo: str, partido: str, espectro: str, extras: tu
     elegivel = con.filter(~pl.col("CD_ORIGEM_DESPESA").is_in(EXCL_CONTRATADAS))
     fn = "NM_FORNECEDOR"
     return {
-        "total": con[valor].sum(),
-        "total_elegivel": elegivel[valor].sum(),
-        "n_lancamentos": con.height,
-        "n_candidatos": con["SQ_CANDIDATO"].n_unique() if con.height else 0,
-        "por_uf": con.group_by("SG_UF").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
+        **_totais(con, valor, n_candidatos=True),
+        "total_elegivel": elegivel.select(pl.col(valor).sum()).collect().item(),
+        "por_uf": _grupo(con, "SG_UF", valor),
         "por_espectro": _por_espectro(con, valor),
         "por_origem": (
             con.group_by("DS_ORIGEM_DESPESA")
             .agg(pl.col(valor).sum().alias("valor"))
             .sort("valor", descending=True)
             .head(12)
+            .collect()
         ),
-        "por_documento": con.group_by("DS_TIPO_DOCUMENTO").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
+        "por_documento": _grupo(con, "DS_TIPO_DOCUMENTO", valor),
         "por_fornecedor": (
             con.drop_nulls("NR_CPF_CNPJ_FORNECEDOR")
-            .group_by(["NR_CPF_CNPJ_FORNECEDOR", fn])
-            .agg(pl.col(valor).sum().alias("valor"))
+            .group_by("NR_CPF_CNPJ_FORNECEDOR")
+            .agg(
+                pl.col(valor).sum().alias("valor"),
+                pl.col(fn).first().alias(fn),
+            )
             .sort("valor", descending=True)
             .head(15)
+            .collect()
         ),
     }
 
@@ -90,11 +110,11 @@ def resumo_pagas(uf: str, extras: tuple = ()) -> dict:
     valor = "VR_PAGTO_DESPESA"
     elegivel = pag.filter(~pl.col("CD_ORIGEM_DESPESA").is_in(EXCL_PAGAS))
     return {
-        "total": pag[valor].sum(),
-        "total_elegivel": elegivel[valor].sum(),
-        "n_lancamentos": pag.height,
-        "por_uf": pag.group_by("SG_UF").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
-        "por_origem": pag.group_by("DS_ORIGEM_DESPESA").agg(pl.col(valor).sum().alias("valor")).sort("valor", descending=True),
+        "total": pag.select(pl.col(valor).sum()).collect().item(),
+        "total_elegivel": elegivel.select(pl.col(valor).sum()).collect().item(),
+        **_totais(pag, valor),
+        "por_uf": _grupo(pag, "SG_UF", valor),
+        "por_origem": _grupo(pag, "DS_ORIGEM_DESPESA", valor),
     }
 
 
