@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: prestacao-contas-2026
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"

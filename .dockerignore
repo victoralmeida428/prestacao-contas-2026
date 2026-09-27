@@ -1,0 +1,14 @@
+.venv
+.git
+.gitignore
+.idea
+**/__pycache__
+**/*.pyc
+
+# CSV brutos do TSE (~1,6 GB) - o container usa apenas data/dashboard/*.parquet
+data/prestacao_de_contas_eleitorais_candidatos_2026
+
+# Artefatos de analise
+*.ipynb
+assets
+models

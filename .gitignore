@@ -1,0 +1,9 @@
+# Ambientes e caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.idea/
+
+# CSV brutos do TSE (~1,6 GB). O dashboard consome data/dashboard/*.parquet.
+data/prestacao_de_contas_eleitorais_candidatos_2026/

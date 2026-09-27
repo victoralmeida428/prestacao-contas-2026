@@ -1,0 +1,176 @@
+"""Construcao das figuras Plotly a partir de agregacoes (model/metrics).
+
+Nao ha graficos de pizza neste dashboard: composicoes sao mostradas em barras.
+"""
+
+from __future__ import annotations
+
+import plotly.graph_objects as go
+import polars as pl
+
+from .. import config
+from ..model.espectro import CORES_ESPECTRO
+
+
+def _layout(fig: go.Figure, titulo: str, altura: int = 360, legenda: bool = False) -> go.Figure:
+    fig.update_layout(
+        title=dict(text=titulo, font=dict(size=15, color="#1f2733"), x=0.02),
+        template="plotly_white",
+        margin=dict(l=58, r=18, t=54, b=48),
+        height=altura,
+        showlegend=legenda,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        font=dict(color="#364152"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        clickmode="event",
+    )
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(gridcolor="#eef1f5")
+    return fig
+
+
+def _vazio(titulo: str, altura: int = 360) -> go.Figure:
+    return _layout(go.Figure(), titulo, altura)
+
+
+def _cd(valores) -> list:
+    """customdata por ponto (valor cru da dimensao) para o filtro cruzado."""
+    return [[v] for v in valores]
+
+
+def _rgb(cor: str) -> tuple[int, int, int]:
+    h = cor.lstrip("#")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _clarear(cor: str, alpha: float = 0.28) -> str:
+    r, g, b = _rgb(cor)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def _cores(labels, cor: str, destaque: str | None):
+    """Destaque: a barra selecionada fica na cor cheia; as demais, claras."""
+    if destaque is None:
+        return cor
+    return [cor if str(lbl) == str(destaque) else _clarear(cor) for lbl in labels]
+
+
+def _cores_de(cores: list, labels, destaque: str | None):
+    if destaque is None:
+        return cores
+    return [c if str(lbl) == str(destaque) else _clarear(c) for c, lbl in zip(cores, labels)]
+
+
+def barra_v(labels, valores, titulo, cor=config.AZUL, altura=360, customdata=None) -> go.Figure:
+    fig = go.Figure(go.Bar(x=labels, y=valores, marker_color=cor, customdata=customdata))
+    fig.update_yaxes(tickformat="~s")
+    return _layout(fig, titulo, altura)
+
+
+def barra_h(labels, valores, titulo, cor=config.AZUL, altura=360, customdata=None) -> go.Figure:
+    fig = go.Figure(go.Bar(x=valores, y=labels, orientation="h", marker_color=cor, customdata=customdata))
+    fig.update_xaxes(tickformat="~s")
+    return _layout(fig, titulo, altura)
+
+
+def _xy(df: pl.DataFrame, x: str) -> tuple[list, list]:
+    return df[x].to_list(), df["valor"].to_list()
+
+
+def fig_receita_uf(rec: dict, destaque: str | None = None) -> go.Figure:
+    x, y = _xy(rec["por_uf"], "SG_UF")
+    return barra_v(x, y, "Receita declarada por UF", _cores(x, config.AZUL, destaque), customdata=_cd(x))
+
+
+def fig_receita_partido(rec: dict, destaque: str | None = None) -> go.Figure:
+    d = rec["por_partido"].head(15).sort("valor")
+    x, y = _xy(d, "SG_PARTIDO")
+    return barra_h(x, y, "Top 15 partidos por receita", _cores(x, config.VERDE, destaque), customdata=_cd(x))
+
+
+def fig_receita_espectro(rec: dict, destaque: str | None = None) -> go.Figure:
+    d = rec["por_espectro"]
+    eixos = d["ESPECTRO"].to_list()
+    cores = [CORES_ESPECTRO.get(e, config.CINZA) for e in eixos]
+    fig = go.Figure(go.Bar(x=eixos, y=d["valor"].to_list(), marker_color=_cores_de(cores, eixos, destaque), customdata=_cd(eixos)))
+    fig.update_yaxes(tickformat="~s")
+    return _layout(fig, "Receita por espectro politico", 360)
+
+
+def fig_despesa_espectro(desp: dict, destaque: str | None = None) -> go.Figure:
+    d = desp["por_espectro"]
+    eixos = d["ESPECTRO"].to_list()
+    cores = [CORES_ESPECTRO.get(e, config.CINZA) for e in eixos]
+    fig = go.Figure(go.Bar(x=eixos, y=d["valor"].to_list(), marker_color=_cores_de(cores, eixos, destaque), customdata=_cd(eixos)))
+    fig.update_yaxes(tickformat="~s")
+    return _layout(fig, "Despesa contratada por espectro politico", 360)
+
+
+def fig_fonte(rec: dict, destaque: str | None = None) -> go.Figure:
+    d = rec["por_fonte"].sort("valor")
+    x, y = _xy(d, "DS_FONTE_RECEITA")
+    return barra_h(x, y, "Origem dos recursos (fonte)", _cores(x, config.LARANJA, destaque), customdata=_cd(x))
+
+
+def fig_natureza(rec: dict, destaque: str | None = None) -> go.Figure:
+    d = rec["por_natureza"].sort("valor")
+    x, y = _xy(d, "DS_NATUREZA_RECEITA")
+    return barra_h(x, y, "Natureza da receita (financeiro x estimavel)", _cores(x, config.AZUL, destaque), 300, customdata=_cd(x))
+
+
+def fig_genero(rec: dict, destaque: str | None = None) -> go.Figure:
+    d = rec["por_genero"].sort("valor")
+    x, y = _xy(d, "DS_GENERO")
+    return barra_h(x, y, "Receita por genero (autodeclarado)", _cores(x, config.ROXO, destaque), 300, customdata=_cd(x))
+
+
+def fig_cor_raca(rec: dict, destaque: str | None = None) -> go.Figure:
+    d = rec["por_cor"].sort("valor")
+    x, y = _xy(d, "DS_COR_RACA")
+    return barra_h(x, y, "Receita por cor/raca (autodeclarado)", _cores(x, config.ROXO, destaque), 320, customdata=_cd(x))
+
+
+def fig_despesa_categoria(desp: dict, destaque: str | None = None) -> go.Figure:
+    d = desp["por_origem"].sort("valor")
+    x, y = _xy(d, "DS_ORIGEM_DESPESA")
+    return barra_h(x, y, "Top 12 categorias de despesa contratada", _cores(x, config.LARANJA, destaque), 400, customdata=_cd(x))
+
+
+def fig_contratado_pago(desp: dict, pag: dict, destaque: str | None = None) -> go.Figure:
+    c = desp["por_uf"].rename({"valor": "contratado"})
+    p = pag["por_uf"].rename({"valor": "pago"})
+    d = c.join(p, on="SG_UF", how="full", coalesce=True).fill_null(0).sort("contratado", descending=True)
+    ufs = d["SG_UF"].to_list()
+    fig = go.Figure()
+    fig.add_bar(x=ufs, y=d["contratado"].to_list(), name="Contratado", marker_color=_cores(ufs, config.AZUL, destaque), customdata=_cd(ufs))
+    fig.add_bar(x=ufs, y=d["pago"].to_list(), name="Pago", marker_color=_cores(ufs, config.VERDE, destaque), customdata=_cd(ufs))
+    fig.update_layout(barmode="group")
+    fig.update_yaxes(tickformat="~s")
+    return _layout(fig, "Despesas por UF - contratado x pago", 360, legenda=True)
+
+
+def fig_fornecedores(desp: dict, destaque: str | None = None) -> go.Figure:
+    d = desp["por_fornecedor"].sort("valor")
+    nomes = d["NM_FORNECEDOR"].to_list()
+    labels = [n[:38] for n in nomes]
+    return barra_h(labels, d["valor"].to_list(), "Top 15 fornecedores (despesa contratada)", _cores(nomes, config.VERMELHO, destaque), 400, customdata=_cd(nomes))
+
+
+def fig_concentracao(rec: dict) -> go.Figure:
+    d = rec["por_candidato"]
+    n = d.height
+    if n == 0:
+        return _vazio("Concentracao da receita entre candidatos")
+    cum = (d["valor"].cum_sum() / d["valor"].sum() * 100).to_list()
+    eixo_x = [i / n * 100 for i in range(1, n + 1)]
+    fig = go.Figure(
+        go.Scatter(
+            x=eixo_x, y=cum, mode="lines",
+            line=dict(color=config.AZUL, width=3),
+            fill="tozeroy", fillcolor="rgba(31,111,235,0.10)",
+        )
+    )
+    fig.update_xaxes(title="% de candidatos (do maior para o menor)", showgrid=False)
+    fig.update_yaxes(title="% acumulada da receita", gridcolor="#eef1f5")
+    return _layout(fig, "Concentracao da receita entre candidatos")
