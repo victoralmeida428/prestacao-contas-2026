@@ -5,6 +5,8 @@ Nao ha graficos de pizza neste dashboard: composicoes sao mostradas em barras.
 
 from __future__ import annotations
 
+import math
+
 import plotly.graph_objects as go
 import polars as pl
 
@@ -62,16 +64,51 @@ def _cores_de(cores: list, labels, destaque: str | None):
     return [c if str(lbl) == str(destaque) else _clarear(c) for c, lbl in zip(cores, labels)]
 
 
+def _rotulo_br(v: float) -> str:
+    """Rotulo de eixo em pt-BR: k (mil), M (milhao) e B (bilhao)."""
+    for div, suf in ((1e9, "B"), (1e6, "M"), (1e3, "k")):
+        if abs(v) >= div:
+            n = v / div
+            texto = f"{n:.0f}" if n == int(n) else f"{n:.1f}".replace(".", ",")
+            return texto + suf
+    return f"{v:.0f}"
+
+
+def _ticks(vmin: float, vmax: float, n: int = 6) -> tuple[list, list]:
+    """Ticks "redondos" (passo 1/2/2,5/5 x 10^k) com rotulos pt-BR."""
+    if vmax <= vmin:
+        return [vmin, vmax], [_rotulo_br(vmin), _rotulo_br(vmax)]
+    bruto = (vmax - vmin) / n
+    mag = 10 ** math.floor(math.log10(bruto))
+    passo = next(m * mag for m in (1, 2, 2.5, 5, 10) if bruto <= m * mag)
+    inicio = math.floor(vmin / passo) * passo
+    fim = math.ceil(vmax / passo) * passo
+    vals: list[float] = []
+    v = inicio
+    while v <= fim + passo / 2:
+        vals.append(round(v, 6))
+        v += passo
+    return vals, [_rotulo_br(v) for v in vals]
+
+
+def _eixo_valor(fig: go.Figure, valores, eixo: str = "y") -> go.Figure:
+    """Substitui o SI do Plotly (k/M/G) por k/M/B no eixo de valores."""
+    limpos = [float(v) for v in valores if v is not None]
+    if not limpos:
+        return fig
+    vals, txt = _ticks(0.0, max(limpos))
+    (fig.update_xaxes if eixo == "x" else fig.update_yaxes)(tickvals=vals, ticktext=txt)
+    return fig
+
+
 def barra_v(labels, valores, titulo, cor=config.AZUL, altura=360, customdata=None) -> go.Figure:
     fig = go.Figure(go.Bar(x=labels, y=valores, marker_color=cor, customdata=customdata))
-    fig.update_yaxes(tickformat="~s")
-    return _layout(fig, titulo, altura)
+    return _layout(_eixo_valor(fig, valores, "y"), titulo, altura)
 
 
 def barra_h(labels, valores, titulo, cor=config.AZUL, altura=360, customdata=None) -> go.Figure:
     fig = go.Figure(go.Bar(x=valores, y=labels, orientation="h", marker_color=cor, customdata=customdata))
-    fig.update_xaxes(tickformat="~s")
-    return _layout(fig, titulo, altura)
+    return _layout(_eixo_valor(fig, valores, "x"), titulo, altura)
 
 
 def _xy(df: pl.DataFrame, x: str) -> tuple[list, list]:
@@ -94,8 +131,7 @@ def fig_receita_espectro(rec: dict, destaque: str | None = None) -> go.Figure:
     eixos = d["ESPECTRO"].to_list()
     cores = [CORES_ESPECTRO.get(e, config.CINZA) for e in eixos]
     fig = go.Figure(go.Bar(x=eixos, y=d["valor"].to_list(), marker_color=_cores_de(cores, eixos, destaque), customdata=_cd(eixos)))
-    fig.update_yaxes(tickformat="~s")
-    return _layout(fig, "Receita por espectro politico", 360)
+    return _layout(_eixo_valor(fig, d["valor"].to_list(), "y"), "Receita por espectro politico", 360)
 
 
 def fig_despesa_espectro(desp: dict, destaque: str | None = None) -> go.Figure:
@@ -103,8 +139,7 @@ def fig_despesa_espectro(desp: dict, destaque: str | None = None) -> go.Figure:
     eixos = d["ESPECTRO"].to_list()
     cores = [CORES_ESPECTRO.get(e, config.CINZA) for e in eixos]
     fig = go.Figure(go.Bar(x=eixos, y=d["valor"].to_list(), marker_color=_cores_de(cores, eixos, destaque), customdata=_cd(eixos)))
-    fig.update_yaxes(tickformat="~s")
-    return _layout(fig, "Despesa contratada por espectro politico", 360)
+    return _layout(_eixo_valor(fig, d["valor"].to_list(), "y"), "Despesa contratada por espectro politico", 360)
 
 
 def fig_fonte(rec: dict, destaque: str | None = None) -> go.Figure:
@@ -146,8 +181,7 @@ def fig_contratado_pago(desp: dict, pag: dict, destaque: str | None = None) -> g
     fig.add_bar(x=ufs, y=d["contratado"].to_list(), name="Contratado", marker_color=_cores(ufs, config.AZUL, destaque), customdata=_cd(ufs))
     fig.add_bar(x=ufs, y=d["pago"].to_list(), name="Pago", marker_color=_cores(ufs, config.VERDE, destaque), customdata=_cd(ufs))
     fig.update_layout(barmode="group")
-    fig.update_yaxes(tickformat="~s")
-    return _layout(fig, "Despesas por UF - contratado x pago", 360, legenda=True)
+    return _layout(_eixo_valor(fig, d["contratado"].to_list() + d["pago"].to_list(), "y"), "Despesas por UF - contratado x pago", 360, legenda=True)
 
 
 def fig_fornecedores(desp: dict, destaque: str | None = None) -> go.Figure:
