@@ -27,6 +27,15 @@ def _grupo(lf: pl.LazyFrame, coluna: str, valor: str) -> pl.DataFrame:
     )
 
 
+def _grupo_qtd(lf: pl.LazyFrame, coluna: str) -> pl.DataFrame:
+    return (
+        lf.group_by(coluna)
+        .agg(pl.col("SQ_CANDIDATO").n_unique().alias("valor"))
+        .sort("valor", descending=True)
+        .collect()
+    )
+
+
 def _por_espectro(lf: pl.LazyFrame, valor: str) -> pl.DataFrame:
     return (
         lf.group_by("ESPECTRO")
@@ -61,10 +70,21 @@ def resumo_receitas(uf: str, cargo: str, partido: str, espectro: str, extras: tu
         "por_espectro": _por_espectro(rec, valor),
         "por_fonte": _grupo(rec, "DS_FONTE_RECEITA", valor),
         "por_natureza": _grupo(rec, "DS_NATUREZA_RECEITA", valor),
-        "por_genero": _grupo(rec, "DS_GENERO", valor),
-        "por_cor": _grupo(rec, "DS_COR_RACA", valor),
+        "por_genero": _grupo_qtd(rec, "DS_GENERO"),
+        "por_cor": _grupo_qtd(rec, "DS_COR_RACA"),
         "por_candidato": _grupo(rec, "SQ_CANDIDATO", valor),
+        "demografia_candidato": _demografia(rec, valor),
     }
+
+
+def _demografia(lf: pl.LazyFrame, valor: str) -> pl.DataFrame:
+    """Receita total por candidato com espectro, genero e cor/raca (para boxplots)."""
+    return (
+        lf.group_by("SQ_CANDIDATO", "ESPECTRO", "DS_GENERO", "DS_COR_RACA")
+        .agg(pl.col(valor).sum().alias("valor"))
+        .filter(pl.col("valor") > 0)
+        .collect()
+    )
 
 
 @lru_cache(maxsize=512)

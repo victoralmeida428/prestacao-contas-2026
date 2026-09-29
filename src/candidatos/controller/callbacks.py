@@ -78,12 +78,14 @@ def atualizar(uf: str, cargo: str, partido: str, espectro: str, selecao: dict | 
     desp_fr, d_fr = para("g-fornecedores")
     rec_g, d_g = para("g-genero")
     rec_c, d_cor = para("g-cor")
+    rec_bg, _ = para("g-receita-box-genero")
+    rec_bc, _ = para("g-receita-box-cor")
     rec_conc, _ = para("g-concentracao")
 
     return (
         _kpis(ind),
         _selecoes_info(selecao),
-        charts.fig_receita_uf(rec_uf[0], d_uf),
+        charts.fig_receita_uf_mapa(rec_uf[0], d_uf),
         charts.fig_receita_partido(rec_p[0], d_p),
         charts.fig_receita_espectro(rec_e[0], d_e),
         charts.fig_despesa_espectro(desp_e[1], d_desp_e),
@@ -95,6 +97,8 @@ def atualizar(uf: str, cargo: str, partido: str, espectro: str, selecao: dict | 
         charts.fig_genero(rec_g[0], d_g),
         charts.fig_cor_raca(rec_c[0], d_cor),
         charts.fig_concentracao(rec_conc[0]),
+        charts.fig_receita_genero_box(rec_bg[0]),
+        charts.fig_receita_cor_box(rec_bc[0]),
     )
 
 

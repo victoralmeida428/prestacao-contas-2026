@@ -27,6 +27,8 @@ GRAFICOS = [
     "g-genero",
     "g-cor",
     "g-concentracao",
+    "g-receita-box-genero",
+    "g-receita-box-cor",
 ]
 
 # Filtro cruzado: dimensao (coluna, rotulo) controlada por cada grafico ao clicar

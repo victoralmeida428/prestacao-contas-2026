@@ -23,6 +23,8 @@ DASH_DIR = Path(
     os.environ.get("CANDIDATOS_DASH_DIR", REPO_ROOT / "data" / "dashboard")
 )
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+GEO_DIR = Path(__file__).resolve().parent / "geo"
+BRAZIL_GEOJSON = GEO_DIR / "brazil_states.geojson"
 
 ANO_ELEICAO = 2026
 UF_CONSOLIDADO = "BRASIL"

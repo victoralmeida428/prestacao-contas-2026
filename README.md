@@ -53,6 +53,7 @@ src/candidatos/
 │   ├── formatting.py          # formatação pt-BR
 │   ├── ids.py                 # ids compartilhados
 │   └── assets/style.css       # CSS (Dash carrega automaticamente)
+├── geo/brazil_states.geojson  # malha das UFs para o mapa (sigla -> SG_UF)
 └── controller/callbacks.py    # CONTROLLER (filtros -> dados -> figuras)
 ```
 
@@ -97,7 +98,7 @@ O repositório inclui `render.yaml`. Basta criar um **Blueprint** no Render apon
 - **Filtros:** UF, Cargo, Partido e Espectro político.
 - **Filtro cruzado:** clicar numa barra filtra os demais gráficos pela dimensão daquele gráfico (ex.: clicar em `SP` filtra os outros por UF; clicar em `PL` filtra por partido). Seleções de gráficos diferentes se acumulam, o gráfico clicado não se filtra pela própria dimensão, clicar de novo na mesma barra desliga e o botão **Limpar seleções** zera tudo. Os cliques combinam com os dropdowns.
 - **KPIs:** receita declarada, despesas contratadas, despesas pagas, dívida estimada (C − P) e nº de candidatos.
-- **Gráficos:** receita por UF, top partidos, receita/despesa por espectro, origem dos recursos, natureza, categorias de despesa, contratado × pago por UF, top fornecedores, gênero, cor/raça e curva de concentração. Sem gráficos de pizza.
+- **Gráficos:** receita por UF em **mapa coroplético do Brasil** (quanto mais escuro o verde, maior a receita), top partidos, receita/despesa por espectro, origem dos recursos, natureza, categorias de despesa, contratado × pago por UF, top fornecedores, **nº de candidatos** por gênero e por cor/raça, **dois boxplots da receita por candidato** (espectro político × gênero e espectro político × cor/raça) e curva de concentração. Sem gráficos de pizza.
 
 ## Espectro político
 
